@@ -28,6 +28,10 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(pmw3610, CONFIG_INPUT_LOG_LEVEL);
 
+// 外部からアクセス可能なorientation関数の宣言
+extern uint16_t pmw3610_get_orientation(void);
+extern void pmw3610_set_orientation(uint16_t orientation);
+
 
 //////// Sensor initialization steps definition //////////
 // init is done in non-blocking manner (i.e., async), a //
@@ -662,18 +666,31 @@ static int pmw3610_report_data(const struct device *dev) {
     int16_t raw_y =
         TOINT16((buf[PMW3610_Y_L_POS] + ((buf[PMW3610_XY_H_POS] & 0x0F) << 8)), 12) / dividor;
 
-    if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_0)) {
-        x = -raw_x;
-        y = raw_y;
-    } else if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_90)) {
-        x = raw_y;
-        y = -raw_x;
-    } else if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_180)) {
-        x = raw_x;
-        y = -raw_y;
-    } else if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_270)) {
-        x = -raw_y;
-        y = raw_x;
+    // 動的なorientation設定を取得
+    uint16_t orientation = pmw3610_get_orientation();
+    
+    switch (orientation) {
+        case 0:
+            x = -raw_x;
+            y = raw_y;
+            break;
+        case 90:
+            x = raw_y;
+            y = -raw_x;
+            break;
+        case 180:
+            x = raw_x;
+            y = -raw_y;
+            break;
+        case 270:
+            x = -raw_y;
+            y = raw_x;
+            break;
+        default:
+            // デフォルトは0度と同じ
+            x = -raw_x;
+            y = raw_y;
+            break;
     }
 
     if (IS_ENABLED(CONFIG_PMW3610_INVERT_X)) {

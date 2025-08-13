@@ -1,0 +1,10 @@
+description: PMW3610 trackball rotation control behavior
+
+compatible: "zmk,behavior-pmw-rotation"
+
+include: base.yaml
+
+properties:
+  "#binding-cells":
+    type: int
+    const: 0
