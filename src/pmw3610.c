@@ -666,31 +666,39 @@ static int pmw3610_report_data(const struct device *dev) {
     int16_t raw_y =
         TOINT16((buf[PMW3610_Y_L_POS] + ((buf[PMW3610_XY_H_POS] & 0x0F) << 8)), 12) / dividor;
 
-    // 動的なorientation設定を取得
-    uint16_t orientation = pmw3610_get_orientation();
+    // まず元のCONFIG設定に基づく変換を適用
+    if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_0)) {
+        x = -raw_x;
+        y = raw_y;
+    } else if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_90)) {
+        x = raw_y;
+        y = -raw_x;
+    } else if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_180)) {
+        x = raw_x;
+        y = -raw_y;
+    } else if (IS_ENABLED(CONFIG_PMW3610_ORIENTATION_270)) {
+        x = -raw_y;
+        y = raw_x;
+    }
     
-    switch (orientation) {
-        case 0:
-            x = -raw_x;
-            y = raw_y;
-            break;
-        case 90:
-            x = raw_y;
-            y = -raw_x;
-            break;
-        case 180:
-            x = raw_x;
-            y = -raw_y;
-            break;
-        case 270:
-            x = -raw_y;
-            y = raw_x;
-            break;
-        default:
-            // デフォルトは0度と同じ
-            x = -raw_x;
-            y = raw_y;
-            break;
+    // 動的なorientation設定による追加回転を適用
+    uint16_t dynamic_rotation = pmw3610_get_orientation();
+    if (dynamic_rotation != 0) {
+        int16_t temp_x = x, temp_y = y;
+        switch (dynamic_rotation) {
+            case 90:
+                x = -temp_y;
+                y = temp_x;
+                break;
+            case 180:
+                x = -temp_x;
+                y = -temp_y;
+                break;
+            case 270:
+                x = temp_y;
+                y = -temp_x;
+                break;
+        }
     }
 
     if (IS_ENABLED(CONFIG_PMW3610_INVERT_X)) {
