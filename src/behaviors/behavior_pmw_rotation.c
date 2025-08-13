@@ -26,22 +26,54 @@ struct behavior_pmw_rotation_data {
 
 // グローバル変数として現在の向きを管理
 static uint16_t current_pmw_orientation = 0; // 0, 90, 180, 270
+static bool orientation_loaded_from_settings = false;
 
 // settings用のキー
 #define PMW_ORIENTATION_SETTING_KEY "pmw/orientation"
 
-static int save_orientation_setting(uint16_t orientation) {
-    return settings_save_one(PMW_ORIENTATION_SETTING_KEY, &orientation, sizeof(orientation));
+// Settings handler function
+static int pmw_rotation_settings_handler(const char *key, size_t len, settings_read_cb read_cb,
+                                        void *cb_arg) {
+    const char *next;
+    
+    // Parse the key to match "orientation"
+    if (settings_name_steq(key, "orientation", &next) && !next) {
+        // Validate data size
+        if (len != sizeof(current_pmw_orientation)) {
+            LOG_WRN("Invalid orientation settings size: %d", len);
+            return -EINVAL;
+        }
+        
+        // Read the data using the callback
+        int ret = read_cb(cb_arg, &current_pmw_orientation, sizeof(current_pmw_orientation));
+        if (ret >= 0) {
+            // Validate orientation value (0, 90, 180, 270)
+            if (current_pmw_orientation != 0 && current_pmw_orientation != 90 && 
+                current_pmw_orientation != 180 && current_pmw_orientation != 270) {
+                LOG_WRN("Invalid orientation value %d, using default 0", current_pmw_orientation);
+                current_pmw_orientation = 0;
+            }
+            orientation_loaded_from_settings = true;
+            LOG_INF("Loaded orientation from settings: %d degrees", current_pmw_orientation);
+        } else {
+            LOG_WRN("Failed to read orientation from settings: %d", ret);
+        }
+        return ret;
+    }
+    return 0;
 }
 
-static int load_orientation_setting(void) {
-    uint16_t orientation = 0;
-    int ret = settings_load_one(PMW_ORIENTATION_SETTING_KEY, &orientation, sizeof(orientation));
-    if (ret == sizeof(orientation)) {
-        current_pmw_orientation = orientation;
-        return 0;
+// Register settings handler
+SETTINGS_STATIC_HANDLER_DEFINE(pmw_rotation, "pmw", NULL, pmw_rotation_settings_handler, NULL, NULL);
+
+static int save_orientation_setting(uint16_t orientation) {
+    int ret = settings_save_one(PMW_ORIENTATION_SETTING_KEY, &orientation, sizeof(orientation));
+    if (ret) {
+        LOG_WRN("Failed to save orientation to settings: %d", ret);
+    } else {
+        LOG_DBG("Orientation %d degrees saved to settings", orientation);
     }
-    return -1;
+    return ret;
 }
 
 uint16_t pmw3610_get_orientation(void) {
@@ -51,14 +83,14 @@ uint16_t pmw3610_get_orientation(void) {
 void pmw3610_set_orientation(uint16_t orientation) {
     current_pmw_orientation = orientation;
     save_orientation_setting(orientation);
+    LOG_INF("PMW3610 orientation changed to %d degrees", orientation);
 }
 
 static int behavior_pmw_rotation_init(const struct device *dev) {
     struct behavior_pmw_rotation_data *data = dev->data;
     
-    // 設定から向きを読み込み
-    if (load_orientation_setting() != 0) {
-        // 設定がない場合は0度に設定
+    // 設定が読み込まれていない場合は0度に設定
+    if (!orientation_loaded_from_settings) {
         current_pmw_orientation = 0;
         save_orientation_setting(0);
     }
